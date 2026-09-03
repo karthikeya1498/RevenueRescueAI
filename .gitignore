@@ -12,5 +12,6 @@ dist/
 *.log
 coverage.xml
 htmlcov/
+verification-notes.md
 
 *.egg-info/
