@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
     frontend_origin: str = "http://localhost:5173"
+    database_url: str = "sqlite:///./revenuerescue.db"
 
     model_config = SettingsConfigDict(
         env_file=".env",
