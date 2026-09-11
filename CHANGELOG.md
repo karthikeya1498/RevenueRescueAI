@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0 — Phase 6 safety and Phase 7 resilience
+
+Added deterministic retry limits, terminal-state and success protection, duplicate idempotency prevention, uncertainty escalation, timeout and API-failure classification, bounded exponential backoff, one-shot resilient execution, and safe resume envelopes. No blind side-effect retries were added.
+
 ## 0.3.0 — Phase 4–5 agent brain and controlled tools
 
 Added provider-independent structured agent decisions, strict allow-list validation, an OpenAI-compatible JSON-schema adapter using `gpt-5-mini`, a controlled tool registry, dry-run recovery-intent and escalation tools, and boundary tests. No live financial execution or customer notification was added.
