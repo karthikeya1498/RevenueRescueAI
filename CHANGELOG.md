@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0 — Phase 10/11 production polish and submission preparation
+
+Added request correlation IDs, structured access telemetry, readiness probes, CI, non-root container configuration, Docker Compose deployment shape, comprehensive observability tests, a submission-ready README, five-minute video script, failure story, architecture explanation, and mock panel preparation.
+
 ## 0.6.0 — Phase 9 dashboard and frontend command center
 
 Added the visual command center, recovery queue, Evaluation Lab, transaction-level agent traces, structured trace drawer, responsive navigation, inspected 500-scenario report metrics, and production frontend styling.
