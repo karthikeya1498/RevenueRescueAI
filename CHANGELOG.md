@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0 — Phase 9 dashboard and frontend command center
+
+Added the visual command center, recovery queue, Evaluation Lab, transaction-level agent traces, structured trace drawer, responsive navigation, inspected 500-scenario report metrics, and production frontend styling.
+
 ## 0.5.0 — Phase 8 evaluation engine
 
 Added deterministic batch simulations, reproducible scenario generation, policy and resilience outcome simulation, recovered-revenue metrics, case recovery rates, action accuracy, safety rates, failure and escalation counts, verification reporting, JSON report generation, and an evaluation CLI.
