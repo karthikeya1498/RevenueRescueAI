@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0 — Phase 4–5 agent brain and controlled tools
+
+Added provider-independent structured agent decisions, strict allow-list validation, an OpenAI-compatible JSON-schema adapter using `gpt-5-mini`, a controlled tool registry, dry-run recovery-intent and escalation tools, and boundary tests. No live financial execution or customer notification was added.
+
 ## 0.2.0 — Phase 3 deterministic revenue-risk detection
 
 Added deterministic transaction-risk classification, explicit risk reason codes and severity, stale-pending detection, success protection, missing-context reporting, idempotent recovery-case creation, and automated Phase 3 tests. No AI reasoning or financial action was added.
