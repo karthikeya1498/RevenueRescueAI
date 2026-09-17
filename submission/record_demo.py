@@ -1,6 +1,7 @@
 """Capture the five-minute RevenueRescue AI dashboard walkthrough."""
 
 from pathlib import Path
+
 from playwright.sync_api import sync_playwright
 
 OUTPUT_DIR = Path("/tmp/revenuerescue-video-python")

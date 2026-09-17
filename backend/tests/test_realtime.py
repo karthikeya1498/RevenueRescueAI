@@ -1,7 +1,6 @@
 """Contract tests for the live recovery event stream."""
-from fastapi.testclient import TestClient
-
 from app.main import app
+from fastapi.testclient import TestClient
 
 
 def test_recovery_websocket_handshake_and_heartbeat() -> None:
