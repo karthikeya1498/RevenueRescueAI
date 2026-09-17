@@ -8,7 +8,7 @@ from collections.abc import Generator
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, create_engine
+from sqlalchemy import DateTime, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from app.core.config import get_settings
@@ -30,6 +30,19 @@ _engine_kwargs = (
     {"connect_args": {"check_same_thread": False}} if database_url().startswith("sqlite") else {}
 )
 engine = create_engine(database_url(), future=True, pool_pre_ping=True, **_engine_kwargs)
+
+
+if database_url().startswith("sqlite"):
+
+    @event.listens_for(engine, "connect")
+    def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+        """Make SQLite enforce the same foreign-key invariants as production DBs."""
+
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
@@ -55,10 +68,13 @@ class TimestampMixin:
 
 
 def get_db() -> Generator:
-    """Yield a database session and always close it after use."""
+    """Yield a session, roll back failed requests, and always close it."""
 
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()

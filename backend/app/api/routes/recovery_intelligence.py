@@ -6,16 +6,19 @@ from __future__ import annotations
 
 import json
 import os
+from hashlib import sha256
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.orm import Session
 
+from app.core.database import get_db
+from app.repositories.webhook_events import WebhookEventRepository
 from app.services.intelligence import DecisionAnalysis, analyze_recovery, compare_strategies
-from app.services.verification import WebhookEventLedger, verify_signature
+from app.services.verification import verify_signature
 
 router = APIRouter(prefix="/api/v1/recovery", tags=["recovery-intelligence"])
-ledger = WebhookEventLedger()
 
 
 class DecisionPreviewRequest(BaseModel):
@@ -109,6 +112,7 @@ def strategy_comparison(payloads: list[DecisionPreviewRequest]) -> dict[str, Any
 @router.post("/webhooks/provider", response_model=WebhookResult)
 async def provider_webhook(
     request: Request,
+    db: Session = Depends(get_db),
     x_event_id: str | None = Header(default=None),
     x_signature: str | None = Header(default=None),
 ) -> WebhookResult:
@@ -124,10 +128,26 @@ async def provider_webhook(
     if not verified:
         raise HTTPException(status_code=401, detail="invalid provider signature")
     try:
-        event_type = str(json.loads(body).get("event", "unknown"))
+        payload = json.loads(body)
+        if not isinstance(payload, dict):
+            raise ValueError("webhook payload must be a JSON object")
+        event_type = str(payload.get("event", "unknown"))
     except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail="invalid JSON payload") from None
-    receipt = ledger.accept(event_id=event_id, payload=body)
+    safe_payload = {
+        key: payload[key]
+        for key in ("event", "id", "entity")
+        if key in payload and isinstance(payload[key], (str, int, bool, type(None)))
+    }
+    receipt = WebhookEventRepository(db).record(
+        provider="razorpay",
+        event_id=event_id,
+        event_type=event_type,
+        payload_hash=sha256(body).hexdigest(),
+        signature_verified=True,
+        payload_safe=safe_payload,
+    )
+    db.commit()
     return WebhookResult(
         accepted=receipt.accepted,
         duplicate=receipt.duplicate,

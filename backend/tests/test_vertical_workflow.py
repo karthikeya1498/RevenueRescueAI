@@ -6,6 +6,7 @@ from app.agents.brain import AgentBrain
 from app.agents.contracts import AgentDecisionOutput
 from app.core.database import Base
 from app.core.enums import ActionType, RecoveryCaseState
+from app.models.domain import AgentDecision, RecoveryAttempt
 from app.services.seed_service import build_synthetic_dataset
 from app.workflows.vertical_recovery import CaseTransitionService, VerticalRecoveryWorkflow
 from sqlalchemy import create_engine
@@ -65,3 +66,8 @@ def test_vertical_workflow_connects_agent_policy_tool_and_audit():
     assert result.final_state is RecoveryCaseState.VERIFICATION_PENDING
     assert result.audit_event_count >= 4
     assert case.state is RecoveryCaseState.VERIFICATION_PENDING
+    session.commit()
+    attempt = session.query(RecoveryAttempt).one()
+    decision = session.query(AgentDecision).one()
+    assert attempt.status.value == "planned"
+    assert decision.attempt_id == attempt.id

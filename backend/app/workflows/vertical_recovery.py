@@ -11,13 +11,27 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID, uuid4
 
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.agents.brain import AgentBrain
 from app.agents.contracts import AgentObservation, ValidatedAgentDecision
 from app.core.database import utc_now
-from app.core.enums import ActorType, RecoveryCaseState
-from app.models.domain import AuditEvent, CaseStateTransition, Customer, RecoveryCase, Transaction
+from app.core.enums import (
+    ActorType,
+    DecisionValidationStatus,
+    RecoveryAttemptStatus,
+    RecoveryCaseState,
+)
+from app.models.domain import (
+    AgentDecision,
+    AuditEvent,
+    CaseStateTransition,
+    Customer,
+    RecoveryAttempt,
+    RecoveryCase,
+    Transaction,
+)
 from app.policy.safety import PolicyContext, PolicyDecision, SafetyPolicy
 from app.tools.contracts import ToolContext
 from app.tools.registry import ToolRegistry
@@ -84,12 +98,13 @@ class CaseTransitionService:
         from_state = case.state
         if to_state not in _ALLOWED_TRANSITIONS.get(from_state, frozenset()):
             raise ValueError(f"invalid recovery transition: {from_state.value} -> {to_state.value}")
-        previous = (
-            self.session.query(CaseStateTransition)
-            .filter(CaseStateTransition.case_id == case.id)
-            .count()
+        previous = self.session.scalar(
+            select(CaseStateTransition.sequence_number)
+            .where(CaseStateTransition.case_id == case.id)
+            .order_by(desc(CaseStateTransition.sequence_number))
+            .limit(1)
         )
-        sequence = previous + 1
+        sequence = (previous or 0) + 1
         case.state = to_state
         case.version += 1
         case.last_state_changed_at = now
@@ -104,6 +119,7 @@ class CaseTransitionService:
                 actor_type=actor_type,
                 correlation_id=correlation,
                 occurred_at=now,
+                sequence_number=sequence,
                 metadata_json={"version": case.version},
             )
         )
@@ -186,13 +202,26 @@ class VerticalRecoveryWorkflow:
             allowed_actions=list(self.policy.config.allowed_actions),
         )
         decision = self.brain.reason(observation).decision
+        attempt_number = len(case.attempts) + 1
+        idempotency_key = f"{case.id}:workflow:{attempt_number}"
+        decision_record = AgentDecision(
+            case_id=case.id,
+            decision_version=len(case.decisions) + 1,
+            action_type=decision.action,
+            reason_code=decision.reason_code,
+            rationale_safe=decision.rationale,
+            confidence=decision.confidence,
+            validation_status=DecisionValidationStatus.VALID,
+        )
+        self.session.add(decision_record)
+        self.session.flush()
         policy = self.policy.evaluate(
             PolicyContext(
                 case_state=case.state,
                 transaction_status=transaction.status,
                 action=decision.action,
                 retry_attempt_count=len(case.attempts),
-                idempotency_key=f"{case.id}:workflow:{len(case.attempts) + 1}",
+                idempotency_key=idempotency_key,
             )
         )
         if policy.should_escalate or policy.should_stop or policy.outcome.value == "reject":
@@ -211,6 +240,19 @@ class VerticalRecoveryWorkflow:
             reason_code="policy_allowed",
             correlation_id=correlation_id,
         )
+        attempt = RecoveryAttempt(
+            case_id=case.id,
+            sequence_number=attempt_number,
+            status=RecoveryAttemptStatus.PLANNED,
+            action_type=decision.action,
+            started_at=utc_now(),
+            idempotency_key=idempotency_key,
+            metadata_json={"dry_run": True, "correlation_id": correlation_id},
+        )
+        self.session.add(attempt)
+        self.session.flush()
+        decision_record.attempt_id = attempt.id
+        self.session.flush()
         tool_name = (
             "escalate_recovery_case" if decision.requires_human_review else "draft_recovery_intent"
         )
@@ -221,7 +263,7 @@ class VerticalRecoveryWorkflow:
                 "case_id": case.id,
                 "action": decision.action,
                 "rationale": decision.rationale,
-                "idempotency_key": f"{case.id}:workflow:{len(case.attempts) + 1}",
+                "idempotency_key": idempotency_key,
             }
         output = self.tools.execute(
             tool_name,

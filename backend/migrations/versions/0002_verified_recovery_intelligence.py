@@ -47,6 +47,11 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("provider_event_id", name="uq_recovery_evidence_provider_event"),
+        sa.CheckConstraint("amount_minor >= 0", name="ck_recovery_evidence_amount_nonnegative"),
+        sa.CheckConstraint(
+            "length(currency) = 3 AND currency = upper(currency)",
+            name="ck_recovery_evidence_currency",
+        ),
     )
     op.create_index(
         "ix_recovery_evidence_failed_transaction", "recovery_evidence", ["failed_transaction_id"]

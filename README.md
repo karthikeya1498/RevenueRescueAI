@@ -27,7 +27,7 @@
 
 The repository also includes an inspectable `deterministic-logistic-v1` recovery-probability estimator, failure classification, 0–100 risk scoring, expected-value action ranking with integer minor-unit costs, explainable rationale, signed provider-webhook verification, event-id idempotency, verified recovery attribution, durable webhook/evidence schema, and counterfactual baseline comparison. These controls are deliberately labeled as prototype or synthetic where provider evidence is unavailable; they do not turn synthetic results into production claims.
 
-The repository remains a **simulation and engineering demonstration**. It does not execute real payments, send customer messages, or claim production financial effectiveness.
+The repository remains a **simulation and engineering demonstration**. It does not execute real payments, send customer messages, or claim production financial effectiveness. The persistence review and rewrite is documented in [DATABASE_REVIEW_AND_REWRITE.md](docs/DATABASE_REVIEW_AND_REWRITE.md).
 
 ## System flow
 

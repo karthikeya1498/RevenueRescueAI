@@ -212,7 +212,10 @@ class AuditEvent(UUIDPrimaryKeyMixin, Base):
 
 class CaseStateTransition(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "case_state_transitions"
-    __table_args__ = (Index("ix_transition_case_occurred", "case_id", "occurred_at"),)
+    __table_args__ = (
+        UniqueConstraint("case_id", "sequence_number", name="uq_transition_case_sequence"),
+        Index("ix_transition_case_occurred", "case_id", "occurred_at"),
+    )
 
     case_id: Mapped[UUID] = mapped_column(
         ForeignKey("recovery_cases.id", ondelete="CASCADE"), nullable=False
@@ -223,6 +226,7 @@ class CaseStateTransition(UUIDPrimaryKeyMixin, Base):
     actor_type: Mapped[ActorType] = mapped_column(nullable=False)
     correlation_id: Mapped[str] = mapped_column(String(200), nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(nullable=False)
+    sequence_number: Mapped[int] = mapped_column(nullable=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSON, default=dict, nullable=False
     )
@@ -232,6 +236,7 @@ class CaseStateTransition(UUIDPrimaryKeyMixin, Base):
 
 class ProviderWebhookEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """Immutable provider event receipt used for idempotency and replay safety."""
+
     __tablename__ = "provider_webhook_events"
     __table_args__ = (UniqueConstraint("provider", "external_event_id", name="uq_provider_event"),)
 
@@ -246,10 +251,16 @@ class ProviderWebhookEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class RecoveryEvidence(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """Verified evidence linking a provider success to a recovery intervention."""
+
     __tablename__ = "recovery_evidence"
     __table_args__ = (
         UniqueConstraint("provider_event_id", name="uq_recovery_evidence_provider_event"),
         Index("ix_recovery_evidence_failed_transaction", "failed_transaction_id"),
+        CheckConstraint("amount_minor >= 0", name="ck_recovery_evidence_amount_nonnegative"),
+        CheckConstraint(
+            "length(currency) = 3 AND currency = upper(currency)",
+            name="ck_recovery_evidence_currency",
+        ),
     )
 
     intervention_id: Mapped[str] = mapped_column(String(200), nullable=False)
