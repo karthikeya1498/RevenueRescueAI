@@ -121,6 +121,7 @@ docker compose up --build
 | `backend/app/evaluation` | Deterministic scenarios, simulation engine, metrics, baseline comparisons, and report serialization |
 | `backend/app/services/intelligence.py` | Failure classification, probability, risk, expected value, and explainable action ranking |
 | `backend/app/services/verification.py` | Signature verification, webhook idempotency, canonical payloads, and verified attribution |
+| `backend/app/workflows/vertical_recovery.py` | Connected case lifecycle, bounded agent, policy gate, controlled tool, verification-pending state, and audit transitions |
 | `backend/app/policy` | Safety and policy enforcement |
 | `backend/app/resilience` | Failure classification, backoff, execution envelope, and resumability |
 | `backend/app/tools` | Allow-listed dry-run controlled tools |
@@ -133,6 +134,8 @@ docker compose up --build
 ## Safety boundary
 
 No real payment provider is configured. No LLM call occurs in tests. Controlled tools default to dry-run behavior. Duplicate idempotency keys, terminal states, successful transactions, retry budgets, unknown outcomes, invalid model outputs, timeouts, and provider failures are all explicit decision inputs rather than hidden exceptions. A webhook is not accepted without a configured HMAC secret, and recovery is not attributable without verified provider evidence matching the transaction, amount, currency, and attribution window. See [the data card](docs/DATA_CARD_AND_EVALUATION.md) and [gap-closure design](docs/PRODUCTION_GAP_CLOSURE.md).
+
+The dry-run vertical slice is executable and tested: detected case → context-ready → awaiting decision → bounded agent output → deterministic policy → controlled tool intent → verification pending → audit trail. Provider credentials are intentionally required before any external side effect can be enabled.
 
 ## Project documentation
 

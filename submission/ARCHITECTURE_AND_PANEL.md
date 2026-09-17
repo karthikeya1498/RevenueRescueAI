@@ -8,6 +8,8 @@ RevenueRescue AI is organized as a layered control system. Deterministic risk de
 
 The important architectural choice is the separation between probabilistic reasoning and deterministic authority. AI can help choose among permitted strategies, but policy decides whether a strategy is allowed, and resilience decides how to proceed when the world is uncertain.
 
+The executable dry-run vertical slice now demonstrates one complete case: detected → context collected → bounded agent decision → deterministic policy → controlled tool intent → verification pending → audit trail. It stops before provider side effects and does not label an intent as recovered.
+
 ## Panel questions and prepared answers
 
 | Question | Prepared answer |
