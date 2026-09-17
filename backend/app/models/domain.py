@@ -228,3 +228,38 @@ class CaseStateTransition(UUIDPrimaryKeyMixin, Base):
     )
 
     case: Mapped[RecoveryCase] = relationship(back_populates="transitions")
+
+
+class ProviderWebhookEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Immutable provider event receipt used for idempotency and replay safety."""
+    __tablename__ = "provider_webhook_events"
+    __table_args__ = (UniqueConstraint("provider", "external_event_id", name="uq_provider_event"),)
+
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    external_event_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(160), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    signature_verified: Mapped[bool] = mapped_column(nullable=False, default=False)
+    processed: Mapped[bool] = mapped_column(nullable=False, default=False)
+    payload_safe: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+
+
+class RecoveryEvidence(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Verified evidence linking a provider success to a recovery intervention."""
+    __tablename__ = "recovery_evidence"
+    __table_args__ = (
+        UniqueConstraint("provider_event_id", name="uq_recovery_evidence_provider_event"),
+        Index("ix_recovery_evidence_failed_transaction", "failed_transaction_id"),
+    )
+
+    intervention_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    provider_event_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    failed_transaction_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    successful_transaction_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    amount_minor: Mapped[int] = mapped_column(nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    verified_at: Mapped[datetime] = mapped_column(nullable=False)
+    attribution_window_hours: Mapped[int] = mapped_column(nullable=False, default=72)
+    attribution_reason: Mapped[str] = mapped_column(String(200), nullable=False)
+    attributable: Mapped[bool] = mapped_column(nullable=False, default=False)
+    evidence_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
