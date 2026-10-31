@@ -1,0 +1,40 @@
+name: revenuerescue-backend
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      ENVIRONMENT: development
+      APP_PHASE: foundation
+      DATABASE_URL: postgresql+psycopg://revenuerescue:revenuerescue@postgres:5432/revenuerescue
+      LOG_LEVEL: INFO
+      SERVER_PORT: 8000
+      FRONTEND_ORIGIN: http://localhost:5173
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: revenuerescue
+      POSTGRES_USER: revenuerescue
+      POSTGRES_PASSWORD: revenuerescue
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U revenuerescue -d revenuerescue"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

@@ -16,3 +16,6 @@ verification-notes.md
 realtime-verification.md
 
 *.egg-info/
+*.db
+*.sqlite
+*.sqlite3
