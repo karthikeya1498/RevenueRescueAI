@@ -5,11 +5,17 @@ from app.models.domain import (
     AuditEvent,
     CaseStateTransition,
     Customer,
+    CustomerConsent,
+    PolicyDecision,
     ProviderWebhookEvent,
     RecoveryAttempt,
     RecoveryCase,
     RecoveryEvidence,
+    RecoveryExecution,
+    RecoveryWorkflow,
     Transaction,
+    User,
+    WorkflowStep,
 )
 
 __all__ = [
@@ -17,9 +23,16 @@ __all__ = [
     "AuditEvent",
     "CaseStateTransition",
     "Customer",
+    "CustomerConsent",
+    "PolicyDecision",
     "ProviderWebhookEvent",
     "RecoveryAttempt",
     "RecoveryCase",
     "RecoveryEvidence",
+    "RecoveryExecution",
+    "RecoveryWorkflow",
     "Transaction",
+    "User",
+    "WorkflowStep",
 ]
+

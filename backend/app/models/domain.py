@@ -19,12 +19,23 @@ from app.core.database import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.core.enums import (
     ActionType,
     ActorType,
+    ConsentStatus,
+    ConsentType,
     CustomerStatus,
     DecisionValidationStatus,
+    ExecutionStatus,
+    PolicyDecisionStatus,
+    ReconciliationStatus,
     RecoveryAttemptStatus,
     RecoveryCaseState,
     TransactionStatus,
+    UserRole,
+    UserStatus,
+    WorkflowStatus,
+    WorkflowStepStatus,
+    WorkflowStepType,
 )
+
 
 
 def enum_values(enum_type: type) -> list[str]:
@@ -50,6 +61,32 @@ class Customer(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="customer")
     recovery_cases: Mapped[list["RecoveryCase"]] = relationship(back_populates="customer")
+    consents: Mapped[list["CustomerConsent"]] = relationship(
+        back_populates="customer", cascade="all, delete-orphan"
+    )
+
+
+class CustomerConsent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "customer_consents"
+    __table_args__ = (
+        Index("ix_consent_customer_type", "customer_id", "consent_type"),
+        Index("ix_consent_customer_status", "customer_id", "status"),
+    )
+
+    customer_id: Mapped[UUID] = mapped_column(
+        ForeignKey("customers.id", ondelete="CASCADE"), nullable=False
+    )
+    consent_type: Mapped[ConsentType] = mapped_column(nullable=False)
+    status: Mapped[ConsentStatus] = mapped_column(nullable=False, default=ConsentStatus.GRANTED)
+    merchant_id: Mapped[str | None] = mapped_column(String(128))
+    granted_at: Mapped[datetime] = mapped_column(nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column()
+    expires_at: Mapped[datetime | None] = mapped_column()
+    source: Mapped[str] = mapped_column(String(120), nullable=False, default="checkout_agreement")
+    evidence_reference: Mapped[str | None] = mapped_column(String(255))
+    version: Mapped[int] = mapped_column(nullable=False, default=1)
+
+    customer: Mapped[Customer] = relationship(back_populates="consents")
 
 
 class Transaction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -127,6 +164,13 @@ class RecoveryCase(UUIDPrimaryKeyMixin, Base):
     transitions: Mapped[list["CaseStateTransition"]] = relationship(
         back_populates="case", cascade="all, delete-orphan"
     )
+    policy_decisions: Mapped[list["PolicyDecision"]] = relationship(
+        back_populates="case", cascade="all, delete-orphan"
+    )
+    workflows: Mapped[list["RecoveryWorkflow"]] = relationship(
+        back_populates="case", cascade="all, delete-orphan"
+    )
+
 
 
 class RecoveryAttempt(UUIDPrimaryKeyMixin, Base):
@@ -185,6 +229,42 @@ class AgentDecision(UUIDPrimaryKeyMixin, Base):
 
     case: Mapped[RecoveryCase] = relationship(back_populates="decisions")
     attempt: Mapped[RecoveryAttempt | None] = relationship(back_populates="decision")
+
+
+class PolicyDecision(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Immutable audit record of an authoritative policy engine evaluation."""
+
+    __tablename__ = "policy_decisions"
+    __table_args__ = (
+        Index("ix_policy_decision_case_id", "case_id"),
+        Index("ix_policy_decision_status", "decision_status"),
+        Index("ix_policy_decision_idempotency", "case_id", "idempotency_key"),
+    )
+
+    case_id: Mapped[UUID] = mapped_column(
+        ForeignKey("recovery_cases.id", ondelete="CASCADE"), nullable=False
+    )
+    recommendation_id: Mapped[UUID] = mapped_column(
+        ForeignKey("agent_decisions.id", ondelete="CASCADE"), nullable=False
+    )
+    proposed_action: Mapped[ActionType] = mapped_column(nullable=False)
+    decision_status: Mapped[PolicyDecisionStatus] = mapped_column(nullable=False)
+    policy_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    rule_results_json: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    reasons_json: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    actor_type: Mapped[ActorType] = mapped_column(nullable=False, default=ActorType.SYSTEM)
+    actor_id: Mapped[str | None] = mapped_column(String(200))
+    idempotency_key: Mapped[str | None] = mapped_column(String(250))
+    case_version: Mapped[int] = mapped_column(nullable=False, default=1)
+    evaluated_at: Mapped[datetime] = mapped_column(nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, default=dict, nullable=False
+    )
+
+    case: Mapped[RecoveryCase] = relationship(back_populates="policy_decisions")
+    recommendation: Mapped[AgentDecision] = relationship()
 
 
 class AuditEvent(UUIDPrimaryKeyMixin, Base):
@@ -246,6 +326,7 @@ class ProviderWebhookEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     payload_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     signature_verified: Mapped[bool] = mapped_column(nullable=False, default=False)
     processed: Mapped[bool] = mapped_column(nullable=False, default=False)
+    ingestion_status: Mapped[str] = mapped_column(String(32), nullable=False, default="ACCEPTED")
     payload_safe: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
 
 
@@ -274,3 +355,131 @@ class RecoveryEvidence(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     attribution_reason: Mapped[str] = mapped_column(String(200), nullable=False)
     attributable: Mapped[bool] = mapped_column(nullable=False, default=False)
     evidence_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+
+
+class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """User account model for authentication, authorization, and RBAC."""
+
+    __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("email", name="uq_user_email"),
+        Index("ix_user_email", "email"),
+        Index("ix_user_role", "role"),
+    )
+
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[UserRole] = mapped_column(default=UserRole.OPERATOR, nullable=False)
+    status: Mapped[UserStatus] = mapped_column(default=UserStatus.ACTIVE, nullable=False)
+    last_login_at: Mapped[datetime | None] = mapped_column()
+
+
+class RecoveryWorkflow(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Orchestrated recovery workflow executing authorized bounded steps."""
+
+    __tablename__ = "recovery_workflows"
+    __table_args__ = (
+        Index("ix_workflow_case_status", "case_id", "status"),
+        Index("ix_workflow_policy_decision", "policy_decision_id"),
+    )
+
+    case_id: Mapped[UUID] = mapped_column(
+        ForeignKey("recovery_cases.id", ondelete="CASCADE"), nullable=False
+    )
+    policy_decision_id: Mapped[UUID] = mapped_column(
+        ForeignKey("policy_decisions.id", ondelete="RESTRICT"), nullable=False
+    )
+    status: Mapped[WorkflowStatus] = mapped_column(
+        nullable=False, default=WorkflowStatus.PENDING
+    )
+    strategy: Mapped[str] = mapped_column(String(100), nullable=False)
+    current_step_index: Mapped[int] = mapped_column(nullable=False, default=0)
+    max_steps: Mapped[int] = mapped_column(nullable=False, default=10)
+    scheduled_for: Mapped[datetime | None] = mapped_column()
+    expires_at: Mapped[datetime | None] = mapped_column()
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, default=dict, nullable=False
+    )
+
+    case: Mapped[RecoveryCase] = relationship(back_populates="workflows")
+    policy_decision: Mapped[PolicyDecision] = relationship()
+    steps: Mapped[list["WorkflowStep"]] = relationship(
+        back_populates="workflow",
+        cascade="all, delete-orphan",
+        order_by="WorkflowStep.step_index",
+    )
+
+
+class WorkflowStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Discrete, idempotent execution step within a recovery workflow."""
+
+    __tablename__ = "workflow_steps"
+    __table_args__ = (
+        UniqueConstraint("workflow_id", "step_index", name="uq_step_workflow_index"),
+        UniqueConstraint("idempotency_key", name="uq_step_idempotency_key"),
+        Index("ix_step_workflow_status", "workflow_id", "status"),
+    )
+
+    workflow_id: Mapped[UUID] = mapped_column(
+        ForeignKey("recovery_workflows.id", ondelete="CASCADE"), nullable=False
+    )
+    step_index: Mapped[int] = mapped_column(nullable=False)
+    step_type: Mapped[WorkflowStepType] = mapped_column(nullable=False)
+    status: Mapped[WorkflowStepStatus] = mapped_column(
+        nullable=False, default=WorkflowStepStatus.PENDING
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(250), nullable=False)
+    action_type: Mapped[ActionType] = mapped_column(nullable=False, default=ActionType.NONE)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    execution_result_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    error_message: Mapped[str | None] = mapped_column(String(500))
+    executed_at: Mapped[datetime | None] = mapped_column()
+
+    workflow: Mapped[RecoveryWorkflow] = relationship(back_populates="steps")
+    executions: Mapped[list["RecoveryExecution"]] = relationship(
+        back_populates="step", cascade="all, delete-orphan"
+    )
+
+
+class RecoveryExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Execution outcome record dispatched via a controlled gateway adapter."""
+
+    __tablename__ = "recovery_executions"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_recovery_execution_idempotency"),
+        Index("ix_recovery_execution_case", "case_id"),
+        Index("ix_recovery_execution_external_ref", "external_reference"),
+        Index("ix_recovery_execution_status", "status"),
+    )
+
+    step_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workflow_steps.id", ondelete="CASCADE"), nullable=False
+    )
+    case_id: Mapped[UUID] = mapped_column(
+        ForeignKey("recovery_cases.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, default="razorpay")
+    external_reference: Mapped[str | None] = mapped_column(String(200))
+    status: Mapped[ExecutionStatus] = mapped_column(
+        nullable=False, default=ExecutionStatus.PENDING
+    )
+    amount_minor: Mapped[int] = mapped_column(nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(250), nullable=False)
+    request_payload_safe: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    response_payload_safe: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    error_message_safe: Mapped[str | None] = mapped_column(String(500))
+    latency_ms: Mapped[int | None] = mapped_column()
+    executed_at: Mapped[datetime] = mapped_column(nullable=False)
+
+    step: Mapped[WorkflowStep] = relationship(back_populates="executions")
+    case: Mapped[RecoveryCase] = relationship()
+
