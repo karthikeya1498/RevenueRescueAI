@@ -1,0 +1,1274 @@
+openapi: 3.1.0
+info:
+  title: RevenueRescueAI API
+  description: Complete RESTful API contract and data schemas for RevenueRescueAI autonomous revenue recovery platform.
+  version: 1.0.0
+  contact:
+    name: RevenueRescueAI Engineering Team
+servers:
+  - url: http://localhost:8000
+    description: Local development / Docker Compose ASGI server
+paths:
+  /health:
+    get:
+      tags:
+        - system
+      summary: Check service liveness
+      description: Returns deterministic service liveness information without external side effects.
+      responses:
+        '200':
+          description: Service is healthy and accepting requests.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /ready:
+    get:
+      tags:
+        - system
+      summary: Check dependency readiness
+      description: Verifies database connectivity and configuration readiness without mutating state.
+      responses:
+        '200':
+          description: Service and dependencies are ready.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '503':
+          description: A critical dependency is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/auth/register:
+    post:
+      tags:
+        - authentication
+      summary: Register new operator account
+      description: Registers an operator account with default ROLE_OPERATOR and ACTIVE status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegisterRequest'
+      responses:
+        '201':
+          description: User successfully created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '409':
+          description: Email already registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/auth/login:
+    post:
+      tags:
+        - authentication
+      summary: Authenticate user credentials
+      description: Validates email and password, returning dual JWT access and refresh tokens.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLoginRequest'
+      responses:
+        '200':
+          description: Login successful.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Invalid credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/auth/refresh:
+    post:
+      tags:
+        - authentication
+      summary: Refresh access token
+      description: Exchanges a valid refresh token for a newly rotated access token and refresh token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Tokens successfully rotated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+
+  /api/v1/auth/logout:
+    post:
+      tags:
+        - authentication
+      summary: Log out current user
+      description: Acknowledges client-side token disposal.
+      responses:
+        '200':
+          description: Logout acknowledged.
+
+  /api/v1/auth/me:
+    get:
+      tags:
+        - authentication
+      summary: Get current user profile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Current user profile returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+    patch:
+      tags:
+        - authentication
+      summary: Update current user profile
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: User profile updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+
+  /api/v1/auth/change-password:
+    post:
+      tags:
+        - authentication
+      summary: Change password
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password updated successfully.
+
+  /api/v1/users:
+    get:
+      tags:
+        - user-management
+      summary: List all user accounts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: skip
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Paginated user list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserResponse'
+
+  /api/v1/users/{id}/role:
+    patch:
+      tags:
+        - user-management
+      summary: Update user role (Admin only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRoleRequest'
+      responses:
+        '200':
+          description: User role updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+
+  /api/v1/users/{id}/status:
+    patch:
+      tags:
+        - user-management
+      summary: Update user status (Admin only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserStatusRequest'
+      responses:
+        '200':
+          description: User status updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+
+  /api/v1/dashboard/metrics:
+    get:
+      tags:
+        - dashboard
+      summary: Retrieve authoritative dashboard financial KPIs
+      description: Returns pre-aggregated, authoritative financial metrics computed in integer minor units.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: currency
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^[A-Z]{3}$'
+            default: USD
+        - name: time_range
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [today, last_7_days, last_30_days, all_time]
+            default: all_time
+      responses:
+        '200':
+          description: Dashboard metrics successfully retrieved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardMetricsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v1/dashboard/trend:
+    get:
+      tags:
+        - dashboard
+      summary: Retrieve revenue trendline points
+      description: Delivers chronological time-bucketed points to render the SVG recovery trend curve.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: currency
+          in: query
+          required: false
+          schema:
+            type: string
+            default: USD
+        - name: interval
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [hour, day, week]
+            default: day
+      responses:
+        '200':
+          description: Chronological trend points retrieved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevenueTrendResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v1/cases:
+    get:
+      tags:
+        - cases
+      summary: List recovery cases
+      description: Returns a paginated, filterable collection of recovery cases for the operator queue.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [detected, analyzing, action_selected, action_pending, verification_pending, retry_eligible, escalated, recovered, failed, terminated]
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            default: 'last_state_changed_at:desc'
+      responses:
+        '200':
+          description: Filtered cases list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v1/cases/{case_id}:
+    get:
+      tags:
+        - cases
+      summary: Retrieve case details
+      description: Fetches full details for a recovery case, including customer profile and trigger transaction.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Full case detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseDetailResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /api/v1/cases/{case_id}/timeline:
+    get:
+      tags:
+        - cases
+      summary: Retrieve case transition timeline
+      description: Returns the sequential state machine transitions for visual journey rendering.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Chronological list of case transitions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseTimelineResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /api/v1/events:
+    post:
+      tags:
+        - events
+      summary: Ingest canonical revenue-risk event
+      description: Idempotently accepts, normalizes, validates, and persists a revenue-risk event.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Duplicate event acknowledged.
+        '201':
+          description: Event successfully accepted and persisted.
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '409':
+          description: Conflicting duplicate event detected.
+        '422':
+          description: Event validation failed.
+    get:
+      tags:
+        - events
+      summary: List ingested events
+      description: Paginated retrieval of ingested provider events with filtering.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: provider
+          in: query
+          schema:
+            type: string
+        - name: event_type
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Paginated list of events.
+
+  /api/v1/events/{event_id}:
+    get:
+      tags:
+        - events
+      summary: Get ingested event detail
+      description: Retrieve complete record of an ingested event by internal UUID or external event ID.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Event details.
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /api/v1/webhooks/provider:
+    post:
+      tags:
+        - webhooks
+      summary: Ingest provider payment webhook
+      description: Idempotently ingests and deduplicates payment events from providers.
+      security:
+        - HmacAuth: []
+      parameters:
+        - name: X-Signature-SHA256
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-Event-ID
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Event successfully processed or duplicate recognized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResult'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v1/events/simulate-failure:
+    post:
+      tags:
+        - webhooks
+      summary: Simulate synthetic payment failure
+      description: Injects a synthetic payment failure event for demonstration and testing.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimulateFailureRequest'
+      responses:
+        '201':
+          description: Case created from simulated failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulateFailureResponse'
+
+  /api/v1/recovery/decision-preview:
+    post:
+      tags:
+        - intelligence
+      summary: Preview recovery recommendation
+      description: Stateless recommendation preview without executing any financial side effects.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionPreviewRequest'
+      responses:
+        '200':
+          description: Recommendation preview.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionPreviewResponse'
+
+  /api/v1/cases/{case_id}/actions/retry:
+    post:
+      tags:
+        - actions
+      summary: Execute authorized payment retry
+      description: Dispatches an authorized payment retry attempt against the simulator with an idempotency key.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 250
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteRetryRequest'
+      responses:
+        '200':
+          description: Payment retry dispatched and recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecuteRetryResponse'
+        '400':
+          description: Policy gate veto (e.g. retry budget exhausted).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Conflict (case is in a terminal state).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/cases/{case_id}/actions/escalate:
+    post:
+      tags:
+        - actions
+      summary: Escalate case to human queue
+      description: Moves a recovery case to ESCALATED for manual human-in-the-loop review.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EscalateCaseRequest'
+      responses:
+        '200':
+          description: Case escalated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscalateCaseResponse'
+
+  /api/v1/cases/{case_id}/actions/stop:
+    post:
+      tags:
+        - actions
+      summary: Permanently stop recovery
+      description: Terminates recovery and permanently locks the case against future actions.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StopRecoveryRequest'
+      responses:
+        '200':
+          description: Case terminated and locked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StopRecoveryResponse'
+
+  /api/v1/cases/{case_id}/audit-trail:
+    get:
+      tags:
+        - audit
+      summary: Retrieve case audit trail
+      description: Returns the immutable chronological audit ledger for a specific recovery case.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Sequenced audit ledger entries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseAuditTrailResponse'
+
+  /api/v1/verification/verify-evidence:
+    post:
+      tags:
+        - verification
+      summary: Verify recovery evidence proof
+      description: Validates matching provider payment confirmation within the 72-hour window.
+      security:
+        - HmacAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitEvidenceRequest'
+      responses:
+        '200':
+          description: Evidence verified and recovery confirmed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmitEvidenceResponse'
+
+  /api/v1/evaluation/run:
+    post:
+      tags:
+        - evaluation
+      summary: Run 500-scenario evaluation batch
+      description: Executes an offline evaluation batch with fixed random seed 42 to measure recovery metrics.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunEvaluationRequest'
+      responses:
+        '200':
+          description: Evaluation batch completed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunEvaluationResponse'
+
+  /api/v1/ws/realtime:
+    get:
+      tags:
+        - realtime
+      summary: Real-time event WebSocket connection
+      description: Upgrades HTTP to WebSocket for low-latency dashboard event streaming.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '101':
+          description: Switching protocols to WebSocket.
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    HmacAuth:
+      type: apiKey
+      in: header
+      name: X-Signature-SHA256
+
+  responses:
+    UnauthorizedError:
+      description: Missing or invalid authentication token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFoundError:
+      description: The requested resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, service, phase]
+      properties:
+        status: { type: string, example: "healthy" }
+        service: { type: string, example: "RevenueRescue AI" }
+        phase: { type: string, example: "mvp-evaluation" }
+
+    ReadinessResponse:
+      type: object
+      required: [status, service, environment, dependencies]
+      properties:
+        status: { type: string, example: "ready" }
+        service: { type: string, example: "RevenueRescue AI" }
+        environment: { type: string, example: "development" }
+        dependencies:
+          type: object
+          additionalProperties: { type: string }
+
+    DashboardMetricsResponse:
+      type: object
+      required:
+        - currency
+        - at_risk_revenue_minor
+        - recovered_revenue_minor
+        - recovery_rate_pct
+        - total_at_risk_cases
+        - total_recovered_cases
+        - safety_rate_pct
+      properties:
+        currency: { type: string, example: "USD" }
+        time_range: { type: string, example: "all_time" }
+        at_risk_revenue_minor: { type: integer, example: 216320000 }
+        recovered_revenue_minor: { type: integer, example: 98088700 }
+        recovery_rate_pct: { type: string, example: "45.34%" }
+        case_recovery_rate_pct: { type: string, example: "45.50%" }
+        total_at_risk_cases: { type: integer, example: 400 }
+        total_recovered_cases: { type: integer, example: 182 }
+        escalated_cases: { type: integer, example: 90 }
+        verification_pending_cases: { type: integer, example: 91 }
+        stopped_cases: { type: integer, example: 46 }
+        safety_rate_pct: { type: string, example: "100.00%" }
+        generated_at: { type: string, format: date-time }
+
+    RevenueTrendPoint:
+      type: object
+      required: [timestamp, recovered_minor, at_risk_minor]
+      properties:
+        timestamp: { type: string, format: date-time }
+        recovered_minor: { type: integer, example: 1248000 }
+        at_risk_minor: { type: integer, example: 2500000 }
+
+    RevenueTrendResponse:
+      type: object
+      required: [currency, interval, points]
+      properties:
+        currency: { type: string, example: "USD" }
+        interval: { type: string, example: "day" }
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/RevenueTrendPoint'
+
+    CustomerSummary:
+      type: object
+      required: [id, display_name, status]
+      properties:
+        id: { type: string, format: uuid }
+        display_name: { type: string, example: "Northstar Labs" }
+        status: { type: string, example: "active" }
+
+    TransactionSummary:
+      type: object
+      required: [id, external_id, amount_minor, currency, failure_code]
+      properties:
+        id: { type: string, format: uuid }
+        external_id: { type: string, example: "txn_sim_8F31A" }
+        amount_minor: { type: integer, example: 842000 }
+        currency: { type: string, example: "USD" }
+        failure_code: { type: string, example: "insufficient_funds" }
+
+    CaseSummaryItem:
+      type: object
+      required: [id, case_key, customer, trigger_transaction, state, priority, attempts_count, opened_at, last_state_changed_at]
+      properties:
+        id: { type: string, format: uuid }
+        case_key: { type: string, example: "case_sim_8F31A_01" }
+        customer:
+          $ref: '#/components/schemas/CustomerSummary'
+        trigger_transaction:
+          $ref: '#/components/schemas/TransactionSummary'
+        state: { type: string, example: "action_pending" }
+        priority: { type: integer, example: 100 }
+        attempts_count: { type: integer, example: 1 }
+        opened_at: { type: string, format: date-time }
+        last_state_changed_at: { type: string, format: date-time }
+
+    PaginationMetadata:
+      type: object
+      required: [total, limit, offset, has_more]
+      properties:
+        total: { type: integer, example: 400 }
+        limit: { type: integer, example: 20 }
+        offset: { type: integer, example: 0 }
+        has_more: { type: boolean, example: true }
+
+    CaseListResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CaseSummaryItem'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
+
+    CaseDetailResponse:
+      type: object
+      required: [id, case_key, state, priority, version, opened_at, last_state_changed_at]
+      properties:
+        id: { type: string, format: uuid }
+        case_key: { type: string, example: "case_sim_8F31A_01" }
+        customer:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            external_id: { type: string, example: "cus_sim_9A12F" }
+            display_name: { type: string, example: "Northstar Labs" }
+            email: { type: string, example: "a***n@northstar.io" }
+            status: { type: string, example: "active" }
+        trigger_transaction:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            external_id: { type: string, example: "txn_sim_8F31A" }
+            amount_minor: { type: integer, example: 842000 }
+            currency: { type: string, example: "USD" }
+            failure_code: { type: string, example: "insufficient_funds" }
+            failure_message_safe: { type: string, example: "Card has insufficient funds." }
+            occurred_at: { type: string, format: date-time }
+        state: { type: string, example: "action_pending" }
+        priority: { type: integer, example: 100 }
+        version: { type: integer, example: 2 }
+        attempts:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              sequence_number: { type: integer, example: 1 }
+              action_type: { type: string, example: "retry_now" }
+              status: { type: string, example: "succeeded" }
+              provider_reference: { type: string, example: "ch_sim_8F31_01" }
+              started_at: { type: string, format: date-time }
+              finished_at: { type: string, format: date-time }
+        opened_at: { type: string, format: date-time }
+        last_state_changed_at: { type: string, format: date-time }
+        closed_at: { type: string, format: date-time, nullable: true }
+
+    CaseTimelineResponse:
+      type: object
+      required: [case_id, transitions]
+      properties:
+        case_id: { type: string, format: uuid }
+        transitions:
+          type: array
+          items:
+            type: object
+            required: [sequence_number, to_state, reason_code, actor_type, occurred_at]
+            properties:
+              sequence_number: { type: integer, example: 1 }
+              from_state: { type: string, nullable: true }
+              to_state: { type: string, example: "detected" }
+              reason_code: { type: string, example: "initial_failure_ingested" }
+              actor_type: { type: string, example: "system" }
+              occurred_at: { type: string, format: date-time }
+
+    WebhookResult:
+      type: object
+      required: [accepted, duplicate, event_id, event_type, reason, verified]
+      properties:
+        accepted: { type: boolean, example: true }
+        duplicate: { type: boolean, example: false }
+        event_id: { type: string, example: "evt_sim_99812" }
+        event_type: { type: string, example: "payment_intent.payment_failed" }
+        reason: { type: string, example: "event_ingested_and_dispatched" }
+        verified: { type: boolean, example: true }
+
+    SimulateFailureRequest:
+      type: object
+      required: [customer_id, amount_minor, currency, failure_code]
+      properties:
+        customer_id: { type: string, example: "cus_sim_9A12F" }
+        amount_minor: { type: integer, minimum: 0, example: 842000 }
+        currency: { type: string, pattern: '^[A-Z]{3}$', example: "USD" }
+        failure_code: { type: string, example: "insufficient_funds" }
+        failure_message: { type: string, example: "Card has insufficient funds." }
+
+    SimulateFailureResponse:
+      type: object
+      required: [case_id, case_key, transaction_id, state, message]
+      properties:
+        case_id: { type: string, format: uuid }
+        case_key: { type: string, example: "case_sim_8F31A_01" }
+        transaction_id: { type: string, format: uuid }
+        state: { type: string, example: "detected" }
+        message: { type: string, example: "Synthetic payment failure created." }
+
+    DecisionPreviewRequest:
+      type: object
+      required: [amount_minor, currency]
+      properties:
+        amount_minor: { type: integer, minimum: 0, example: 842000 }
+        currency: { type: string, pattern: '^[A-Z]{3}$', example: "USD" }
+        failure_code: { type: string, example: "insufficient_funds" }
+        failure_message: { type: string, example: "Card has insufficient funds." }
+        prior_attempts: { type: integer, default: 0, minimum: 0, maximum: 20 }
+        customer_success_rate: { type: number, default: 0.5, minimum: 0, maximum: 1 }
+        alternate_method_available: { type: boolean, default: true }
+        unusual_velocity: { type: boolean, default: false }
+        customer_restricted: { type: boolean, default: false }
+
+    DecisionPreviewResponse:
+      type: object
+      required: [mode, currency, model_version, failure_classification, recommendation]
+      properties:
+        mode: { type: string, example: "decision_preview" }
+        currency: { type: string, example: "USD" }
+        model_version: { type: string, example: "deterministic-logistic-v1" }
+        policy_authority: { type: string, example: "deterministic" }
+        failure_classification:
+          type: object
+          properties:
+            category: { type: string, example: "soft_decline" }
+            retryable: { type: boolean, example: true }
+            confidence: { type: string, example: "0.940" }
+            explanation: { type: string }
+        recommendation:
+          type: object
+          properties:
+            action: { type: string, example: "retry_now" }
+            confidence: { type: string, example: "0.940" }
+            rationale:
+              type: array
+              items: { type: string }
+
+    ExecuteRetryRequest:
+      type: object
+      required: [justification]
+      properties:
+        justification: { type: string, minLength: 5, maxLength: 500, example: "Operator manual retry approval." }
+
+    ExecuteRetryResponse:
+      type: object
+      required: [case_id, attempt_id, sequence_number, action_type, status, case_state, provider_reference]
+      properties:
+        case_id: { type: string, format: uuid }
+        attempt_id: { type: string, format: uuid }
+        sequence_number: { type: integer, example: 1 }
+        action_type: { type: string, example: "retry_now" }
+        status: { type: string, example: "succeeded" }
+        case_state: { type: string, example: "verification_pending" }
+        provider_reference: { type: string, example: "ch_sim_8F31_01" }
+        message: { type: string }
+
+    EscalateCaseRequest:
+      type: object
+      required: [reason_code]
+      properties:
+        reason_code: { type: string, example: "operator_manual_escalation" }
+        notes: { type: string, example: "Customer requested callback." }
+
+    EscalateCaseResponse:
+      type: object
+      required: [case_id, previous_state, new_state, escalated_at]
+      properties:
+        case_id: { type: string, format: uuid }
+        previous_state: { type: string, example: "action_pending" }
+        new_state: { type: string, example: "escalated" }
+        escalated_at: { type: string, format: date-time }
+
+    StopRecoveryRequest:
+      type: object
+      required: [stop_reason]
+      properties:
+        stop_reason: { type: string, example: "customer_requested_cancellation" }
+        notes: { type: string, example: "Account cancelled." }
+
+    StopRecoveryResponse:
+      type: object
+      required: [case_id, state, closed_at, message]
+      properties:
+        case_id: { type: string, format: uuid }
+        state: { type: string, example: "terminated" }
+        closed_at: { type: string, format: date-time }
+        message: { type: string }
+
+    CaseAuditTrailResponse:
+      type: object
+      required: [case_id, total_events, events]
+      properties:
+        case_id: { type: string, format: uuid }
+        total_events: { type: integer, example: 5 }
+        events:
+          type: array
+          items:
+            type: object
+            required: [sequence_number, event_type, actor_type, correlation_id, event_time, payload_safe]
+            properties:
+              sequence_number: { type: integer, example: 1 }
+              event_type: { type: string, example: "CASE_DETECTED" }
+              actor_type: { type: string, example: "system" }
+              actor_id: { type: string, nullable: true }
+              correlation_id: { type: string, example: "corr_8f31_4492" }
+              event_time: { type: string, format: date-time }
+              payload_safe: { type: object }
+
+    SubmitEvidenceRequest:
+      type: object
+      required: [intervention_id, provider_event_id, failed_transaction_id, successful_transaction_id, amount_minor, currency]
+      properties:
+        intervention_id: { type: string, example: "11223344-5566-7788-99aa-bbccddeeff00" }
+        provider_event_id: { type: string, example: "evt_sim_99815" }
+        failed_transaction_id: { type: string, example: "txn_sim_8F31A" }
+        successful_transaction_id: { type: string, example: "txn_sim_8F31B" }
+        amount_minor: { type: integer, minimum: 0, example: 842000 }
+        currency: { type: string, pattern: '^[A-Z]{3}$', example: "USD" }
+
+    SubmitEvidenceResponse:
+      type: object
+      required: [evidence_id, attributable, amount_minor, currency, verified_at, case_state, message]
+      properties:
+        evidence_id: { type: string, format: uuid }
+        attributable: { type: boolean, example: true }
+        amount_minor: { type: integer, example: 842000 }
+        currency: { type: string, example: "USD" }
+        verified_at: { type: string, format: date-time }
+        case_state: { type: string, example: "recovered" }
+        message: { type: string }
+
+    RunEvaluationRequest:
+      type: object
+      required: [scenario_count, random_seed]
+      properties:
+        scenario_count: { type: integer, minimum: 1, maximum: 5000, default: 500 }
+        random_seed: { type: integer, default: 42 }
+        strategy_version: { type: string, default: "phase8.v1" }
+
+    RunEvaluationResponse:
+      type: object
+      required:
+        - run_id
+        - status
+        - scenarios
+        - at_risk_cases
+        - recovered_cases
+        - revenue_recovery_rate
+        - safety_rate
+      properties:
+        run_id: { type: string, example: "eval-run-20261030-0042" }
+        status: { type: string, example: "completed" }
+        duration_ms: { type: integer, example: 7610 }
+        scenarios: { type: integer, example: 500 }
+        at_risk_cases: { type: integer, example: 400 }
+        recovered_cases: { type: integer, example: 182 }
+        at_risk_revenue_minor: { type: integer, example: 216320000 }
+        recovered_revenue_minor: { type: integer, example: 98088700 }
+        revenue_recovery_rate: { type: string, example: "45.34%" }
+        case_recovery_rate: { type: string, example: "45.50%" }
+        safety_rate: { type: string, example: "100.00%" }
+        is_synthetic: { type: boolean, example: true }
+
+    ErrorDetail:
+      type: object
+      properties:
+        field: { type: string }
+        issue: { type: string }
+
+    ErrorEnvelope:
+      type: object
+      required: [success, error]
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: { type: string, example: "VALIDATION_ERROR" }
+            message: { type: string, example: "The request contains invalid information." }
+            details:
+              type: array
+              items:
+                $ref: '#/components/schemas/ErrorDetail'
+            request_id: { type: string, example: "req_8f31a_4490" }
+
+    UserRegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name: { type: string, example: "Alex Mercer" }
+        email: { type: string, format: email, example: "alex.mercer@company.com" }
+        password: { type: string, minLength: 8, example: "SecurePassword123!" }
+
+    UserLoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, example: "alex.mercer@company.com" }
+        password: { type: string, example: "SecurePassword123!" }
+
+    RefreshTokenRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string, example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
+
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password: { type: string, example: "OldPassword123!" }
+        new_password: { type: string, minLength: 8, example: "NewPassword456!" }
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        name: { type: string, example: "Alex Mercer Updated" }
+
+    UpdateUserRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [ROLE_ADMIN, ROLE_OPERATOR, ROLE_AUDITOR, ROLE_INGESTOR]
+          example: "ROLE_ADMIN"
+
+    UpdateUserStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED, INACTIVE]
+          example: "ACTIVE"
+
+    UserResponse:
+      type: object
+      required: [id, name, email, role, status, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid, example: "c1f7a0b5-77cf-4db0-a3e9-7ddca1f04b12" }
+        name: { type: string, example: "Alex Mercer" }
+        email: { type: string, format: email, example: "alex.mercer@company.com" }
+        role: { type: string, example: "ROLE_OPERATOR" }
+        status: { type: string, example: "ACTIVE" }
+        created_at: { type: string, format: date-time, example: "2026-10-31T10:45:00Z" }
+        updated_at: { type: string, format: date-time, example: "2026-10-31T10:45:00Z" }
+        last_login_at: { type: string, format: date-time, nullable: true, example: "2026-10-31T10:50:00Z" }
+
+    TokenResponse:
+      type: object
+      required: [access_token, refresh_token, token_type, expires_in]
+      properties:
+        access_token: { type: string, example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
+        refresh_token: { type: string, example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
+        token_type: { type: string, example: "bearer" }
+        expires_in: { type: integer, example: 3600 }
+
